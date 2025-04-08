@@ -62,11 +62,11 @@ def toggle_audio(event):
     global audio_active
     if audio_active:
         audio_active = False
-        audio_button.label.set_text(' Звук ВКЛ')
+        audio_button.label.set_text('Звук ВКЛ')
         stop_audio_stream()
     else:
         audio_active = True
-        audio_button.label.set_text(' Звук ВЫКЛ')
+        audio_button.label.set_text('Звук ВЫКЛ')
         start_audio_stream()
 
 audio_button.on_clicked(toggle_audio)
