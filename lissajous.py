@@ -4,7 +4,6 @@ from matplotlib.animation import FuncAnimation
 from matplotlib.widgets import Slider, Button
 import sounddevice as sd
 import threading
-import time
 
 # Параметры по умолчанию
 params = {
@@ -19,25 +18,41 @@ params = {
 SAMPLE_RATE = 44100
 audio_active = False
 stream = None
+mode_lissajous = True  # True = Лиссажу, False = x(t)/y(t)
 
 # Создание фигуры
-fig = plt.figure(figsize=(12, 8))
-ax_plot = plt.axes([0.1, 0.3, 0.8, 0.6])
+fig = plt.figure(figsize=(12, 9))
 
-# Инициализация графики
-line, = ax_plot.plot([], [], 'b-', lw=2, alpha=0.7)
-point, = ax_plot.plot([], [], 'ro', markersize=8)
-time_text = ax_plot.text(0.02, 0.95, '', transform=ax_plot.transAxes)
+# Основной график Лиссажу
+ax_lissajous = plt.axes([0.1, 0.45, 0.8, 0.45])
+line_lissajous, = ax_lissajous.plot([], [], 'b-', lw=2, alpha=0.7)
+point_lissajous, = ax_lissajous.plot([], [], 'ro', markersize=8)
+time_text = ax_lissajous.text(0.02, 0.95, '', transform=ax_lissajous.transAxes)
+ax_lissajous.set_title('Lambda F Лиссажу', pad=20)
+ax_lissajous.set_xlabel('x(t) = A·sin(a·t + δ)')
+ax_lissajous.set_ylabel('y(t) = B·sin(b·t)')
+ax_lissajous.set_xlim(-1.5, 1.5)
+ax_lissajous.set_ylim(-1.5, 1.5)
+ax_lissajous.grid(True)
 
-# Настройка осей
-ax_plot.set_xlim(-1.5, 1.5)
-ax_plot.set_ylim(-1.5, 1.5)
-ax_plot.grid(True)
-ax_plot.set_title('Lambda F Лиссажу ', pad=20)
-ax_plot.set_xlabel('x(t) = A·sin(a·t + δ)')
-ax_plot.set_ylabel('y(t) = B·sin(b·t)')
+# График x(t)
+ax_xt = plt.axes([0.1, 0.65, 0.8, 0.25])
+line_xt, = ax_xt.plot([], [], 'g-', lw=2)
+point_xt, = ax_xt.plot([], [], 'ro', markersize=6)
+ax_xt.set_ylabel('x(t)')
+ax_xt.grid(True)
+ax_xt.set_visible(False)
 
-# Создание слайдеров
+# График y(t)
+ax_yt = plt.axes([0.1, 0.35, 0.8, 0.25])
+line_yt, = ax_yt.plot([], [], 'r-', lw=2)
+point_yt, = ax_yt.plot([], [], 'ro', markersize=6)
+ax_yt.set_xlabel('t')
+ax_yt.set_ylabel('y(t)')
+ax_yt.grid(True)
+ax_yt.set_visible(False)
+
+# Слайдеры
 slider_axes = {
     'A': plt.axes([0.15, 0.25, 0.65, 0.03]),
     'B': plt.axes([0.15, 0.20, 0.65, 0.03]),
@@ -54,9 +69,16 @@ sliders = {
     'delta': Slider(slider_axes['delta'], 'Смещение δ', 0, 2*np.pi, valinit=params['delta'])
 }
 
+def update_params(val):
+    for name in params:
+        params[name] = sliders[name].val
+
+for slider in sliders.values():
+    slider.on_changed(update_params)
+
 # Кнопка звука
-audio_ax = plt.axes([0.45, 0.01, 0.1, 0.04])
-audio_button = Button(audio_ax, '🔊 Звук ВКЛ', color='lightgoldenrodyellow')
+audio_ax = plt.axes([0.32, 0.01, 0.12, 0.04])
+audio_button = Button(audio_ax, 'Звук ВКЛ', color='lightgoldenrodyellow')
 
 def toggle_audio(event):
     global audio_active
@@ -100,40 +122,69 @@ def stop_audio_stream():
         stream.close()
         stream = None
 
-# Обновление параметров
-def update_params(val):
-    for name in params:
-        params[name] = sliders[name].val
+# Кнопка переключения режима
+mode_ax = plt.axes([0.48, 0.01, 0.2, 0.04])
+mode_button = Button(mode_ax, 'Режим: Лиссажу', color='lightblue')
 
-for slider in sliders.values():
-    slider.on_changed(update_params)
+def toggle_mode(event):
+    global mode_lissajous
+    mode_lissajous = not mode_lissajous
+
+    if mode_lissajous:
+        mode_button.label.set_text('Режим: Лиссажу')
+        ax_lissajous.set_visible(True)
+        ax_xt.set_visible(False)
+        ax_yt.set_visible(False)
+    else:
+        mode_button.label.set_text('Режим: x(t), y(t)')
+        ax_lissajous.set_visible(False)
+        ax_xt.set_visible(True)
+        ax_yt.set_visible(True)
+
+    plt.draw()
+
+mode_button.on_clicked(toggle_mode)
 
 # Анимация
 def init():
-    line.set_data([], [])
-    point.set_data([], [])
+    line_lissajous.set_data([], [])
+    point_lissajous.set_data([], [])
     time_text.set_text('')
-    return line, point, time_text
+
+    line_xt.set_data([], [])
+    point_xt.set_data([], [])
+    line_yt.set_data([], [])
+    point_yt.set_data([], [])
+
+    return line_lissajous, point_lissajous, time_text, line_xt, point_xt, line_yt, point_yt
 
 def animate(i):
     t = np.linspace(0, 2*np.pi, 1000)
     current_t = 2*np.pi * i / 100
-    
+
     x = params['A'] * np.sin(params['a']/50 * t + params['delta'])
     y = params['B'] * np.sin(params['b']/50 * t)
     x_point = params['A'] * np.sin(params['a']/50 * current_t + params['delta'])
     y_point = params['B'] * np.sin(params['b']/50 * current_t)
-    
-    line.set_data(x, y)
-    point.set_data(x_point, y_point)
-    
-    freq_info = f'Частоты: {params["a"]:.1f} Гц (X) и {params["b"]:.1f} Гц (Y)'
-    time_text.set_text(f'{freq_info}\nГромкость: X={params["A"]:.1f}, Y={params["B"]:.1f}')
-    
-    ax_plot.set_xlim(-1.2, 1.2)
-    ax_plot.set_ylim(-1.2, 1.2)
-    
-    return line, point, time_text
+
+    if mode_lissajous:
+        line_lissajous.set_data(x, y)
+        point_lissajous.set_data(x_point, y_point)
+        time_text.set_text(f'Частоты: {params["a"]:.1f} Гц (X) и {params["b"]:.1f} Гц (Y)\n'
+                           f'Громкость: X={params["A"]:.1f}, Y={params["B"]:.1f}')
+        return line_lissajous, point_lissajous, time_text
+    else:
+        line_xt.set_data(t, x)
+        point_xt.set_data(current_t, x_point)
+        ax_xt.set_xlim(t[0], t[-1])
+        ax_xt.set_ylim(-1.2, 1.2)
+
+        line_yt.set_data(t, y)
+        point_yt.set_data(current_t, y_point)
+        ax_yt.set_xlim(t[0], t[-1])
+        ax_yt.set_ylim(-1.2, 1.2)
+
+        return line_xt, point_xt, line_yt, point_yt
 
 ani = FuncAnimation(fig, animate, frames=100, init_func=init, interval=50, blit=True)
 
