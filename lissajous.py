@@ -3,7 +3,8 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from matplotlib.widgets import Slider, Button
 import sounddevice as sd
-import threading
+import tkinter as tk
+from tkinter import simpledialog
 
 # Параметры по умолчанию
 params = {
@@ -39,6 +40,7 @@ ax_lissajous.grid(True)
 ax_xt = plt.axes([0.1, 0.65, 0.8, 0.25])
 line_xt, = ax_xt.plot([], [], 'g-', lw=2)
 point_xt, = ax_xt.plot([], [], 'ro', markersize=6)
+ax_xt.set_title('Lambda F Лиссажу', pad=20)
 ax_xt.set_ylabel('x(t)')
 ax_xt.grid(True)
 ax_xt.set_visible(False)
@@ -64,8 +66,8 @@ slider_axes = {
 sliders = {
     'A': Slider(slider_axes['A'], 'Громкость X', 0.0, 1.0, valinit=params['A']),
     'B': Slider(slider_axes['B'], 'Громкость Y', 0.0, 1.0, valinit=params['B']),
-    'a': Slider(slider_axes['a'], 'Частота X (Гц)', 20, 1000, valinit=params['a']),
-    'b': Slider(slider_axes['b'], 'Частота Y (Гц)', 20, 1000, valinit=params['b']),
+    'a': Slider(slider_axes['a'], 'Частота X (Гц)', 100, 1000, valinit=params['a']),
+    'b': Slider(slider_axes['b'], 'Частота Y (Гц)', 100, 1000, valinit=params['b']),
     'delta': Slider(slider_axes['delta'], 'Смещение δ', 0, 2*np.pi, valinit=params['delta'])
 }
 
@@ -77,7 +79,7 @@ for slider in sliders.values():
     slider.on_changed(update_params)
 
 # Кнопка звука
-audio_ax = plt.axes([0.32, 0.01, 0.12, 0.04])
+audio_ax = plt.axes([0.05, 0.01, 0.1, 0.04])
 audio_button = Button(audio_ax, 'Звук ВКЛ', color='lightgoldenrodyellow')
 
 def toggle_audio(event):
@@ -123,7 +125,7 @@ def stop_audio_stream():
         stream = None
 
 # Кнопка переключения режима
-mode_ax = plt.axes([0.48, 0.01, 0.2, 0.04])
+mode_ax = plt.axes([0.2, 0.01, 0.15, 0.04])
 mode_button = Button(mode_ax, 'Режим: Лиссажу', color='lightblue')
 
 def toggle_mode(event):
@@ -144,6 +146,61 @@ def toggle_mode(event):
     plt.draw()
 
 mode_button.on_clicked(toggle_mode)
+
+
+# Кнопка полноэкранного режима
+fullscreen_ax = plt.axes([0.4, 0.01, 0.15, 0.04])
+fullscreen_button = Button(fullscreen_ax, 'На весь экран', color='lightgray')
+
+def toggle_fullscreen(event):
+    fig.canvas.manager.full_screen_toggle()
+
+fullscreen_button.on_clicked(toggle_fullscreen)
+
+# Кнопка блокировки
+lock_ax = plt.axes([0.6, 0.01, 0.15, 0.04])
+lock_button = Button(lock_ax, 'Заблокировать', color='salmon')
+
+interface_locked = False
+PASSWORD = "1234"
+
+def set_sliders_active(state):
+    for slider in sliders.values():
+        slider.eventson = state
+        slider.active = state
+
+def set_buttons_active(state):
+    audio_button.eventson = state
+    mode_button.eventson = state
+    fullscreen_button.eventson = state
+
+def lock_interface(event):
+    global interface_locked
+
+    if not interface_locked:
+        # Блокируем интерфейс
+        set_sliders_active(False)
+        set_buttons_active(False)
+        interface_locked = True
+        lock_button.label.set_text("Разблокировать")
+        lock_button.color = 'lightgreen'
+    else:
+        # Запрос пароля через tkinter
+        root = tk.Tk()
+        root.withdraw()  # Скрыть главное окно
+        password = simpledialog.askstring("Разблокировка", "Введите пароль:", show='*')
+        root.destroy()
+
+        if password == PASSWORD:
+            set_sliders_active(True)
+            set_buttons_active(True)
+            interface_locked = False
+            lock_button.label.set_text("Заблокировать")
+            lock_button.color = 'salmon'
+        else:
+            print("Неверный пароль!")
+
+lock_button.on_clicked(lock_interface)
 
 # Анимация
 def init():
