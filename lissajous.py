@@ -147,7 +147,6 @@ def toggle_mode(event):
 
 mode_button.on_clicked(toggle_mode)
 
-
 # Кнопка полноэкранного режима
 fullscreen_ax = plt.axes([0.4, 0.01, 0.15, 0.04])
 fullscreen_button = Button(fullscreen_ax, 'На весь экран', color='lightgray')
@@ -185,9 +184,8 @@ def lock_interface(event):
         lock_button.label.set_text("Разблокировать")
         lock_button.color = 'lightgreen'
     else:
-        # Запрос пароля через tkinter
         root = tk.Tk()
-        root.withdraw()  # Скрыть главное окно
+        root.withdraw()
         password = simpledialog.askstring("Разблокировка", "Введите пароль:", show='*')
         root.destroy()
 
@@ -201,6 +199,178 @@ def lock_interface(event):
             print("Неверный пароль!")
 
 lock_button.on_clicked(lock_interface)
+
+# Текущий активный слайдер
+current_active_slider = None
+def get_active_slider(event):
+    global current_active_slider
+    for name, slider in sliders.items():
+        if slider.ax == event.inaxes:
+            current_active_slider = slider
+            return slider
+    return None
+
+# Обработчик событий колеса мыши
+def on_scroll(event):
+    if interface_locked:
+        return
+    
+    slider = get_active_slider(event)
+    if slider is None:
+        return
+    
+    # Определяем шаг изменения в зависимости от слайдера
+    if slider == sliders['a'] or slider == sliders['b']:
+        step = 1  # Шаг 1 для частот
+        current_val = round(slider.val)  # Округляем текущее значение
+    else:
+        step = (slider.valmax - slider.valmin) / 100  # 1% от диапазона для остальных
+        current_val = slider.val
+    
+    if event.button == 'up':
+        new_val = min(current_val + step, slider.valmax)
+    else:
+        new_val = max(current_val - step, slider.valmin)
+    if slider == sliders['a'] or slider == sliders['b']:
+        new_val = round(new_val)
+    
+    slider.set_val(new_val)
+    update_params(new_val)
+
+# Обработчик событий клавиатуры (стрелки)
+def on_key(event):
+    if interface_locked:
+        return
+    
+    slider = current_active_slider
+    if slider is None:
+        return
+
+    if slider == sliders['a'] or slider == sliders['b']:
+        step = 1 
+        current_val = round(slider.val) 
+    else:
+        step = (slider.valmax - slider.valmin) / 100  
+        current_val = slider.val
+    
+    if event.key == 'up' or event.key == 'right':
+        new_val = min(current_val + step, slider.valmax)
+    elif event.key == 'down' or event.key == 'left':
+        new_val = max(current_val - step, slider.valmin)
+    else:
+        return
+    
+    if slider == sliders['a'] or slider == sliders['b']:
+        new_val = round(new_val)
+    
+    slider.set_val(new_val)
+    update_params(new_val)
+
+
+# Глобальные переменные для ввода с клавиатуры
+current_input = ""
+current_active_slider = None
+last_active_slider = None
+
+def on_motion(event):
+    global current_input, current_active_slider, last_active_slider
+    
+    if event.inaxes:
+        # Проверяем, находится ли курсор над слайдером
+        for name, slider in sliders.items():
+            if slider.ax == event.inaxes:
+                # Если перешли на новый слайдер - сбрасываем ввод
+                if slider != last_active_slider:
+                    current_input = ""
+                    last_active_slider = slider
+                current_active_slider = slider
+                return
+        
+    # Если курсор не над слайдером - сбрасываем активный слайдер
+    if current_active_slider is not None:
+        current_active_slider = None
+        current_input = ""
+        update_slider_labels()
+
+def on_key_press(event):
+    global current_input
+    
+    if interface_locked or current_active_slider is None:
+        return
+    
+    # Цифры добавляем к текущему вводу
+    if event.key in '0123456789':
+        current_input += event.key
+        update_slider_from_input()
+    
+    # Точка/запятая для десятичных дробей
+    elif event.key in ['.', ','] and '.' not in current_input:
+        current_input += '.'
+        update_slider_from_input()
+    
+    # Backspace - удаляем последний символ
+    elif event.key == 'backspace' and len(current_input) > 0:
+        current_input = current_input[:-1]
+        update_slider_from_input()
+    
+    # Escape или Enter - сбрасываем ввод
+    elif event.key in ['escape', 'enter']:
+        current_input = ""
+        update_slider_labels()
+    
+    # Стрелки - стандартная обработка
+    elif event.key in ['up', 'down', 'left', 'right']:
+        on_key(event)  # Вызываем существующий обработчик стрелок
+    
+    # Обновляем текст на слайдере
+    update_slider_labels()
+
+def update_slider_from_input():
+    global current_input
+    
+    if current_active_slider is None or not current_input:
+        return
+    
+    try:
+        new_value = float(current_input)
+        
+        # Для частот округляем до целого
+        if current_active_slider in [sliders['a'], sliders['b']]:
+            new_value = round(new_value)
+        
+        # Проверяем границы
+        new_value = max(current_active_slider.valmin, 
+                       min(current_active_slider.valmax, new_value))
+        
+        current_active_slider.set_val(new_value)
+        update_params(new_value)
+        
+    except ValueError:
+        pass  # Игнорируем некорректный ввод
+
+def update_slider_labels():
+    for name, slider in sliders.items():
+        if slider == current_active_slider and current_input:
+            # Временное отображение вводимого значения
+            slider.label.set_text(f"{params_descriptions[name]}: {current_input}")
+        else:
+            # Стандартное отображение
+            slider.label.set_text(f"{params_descriptions[name]}: {slider.val:.2f}")
+    plt.draw()
+
+# Описания параметров для отображения
+params_descriptions = {
+    'A': 'Громкость X',
+    'B': 'Громкость Y',
+    'a': 'Частота X (Гц)',
+    'b': 'Частота Y (Гц)',
+    'delta': 'Смещение δ'
+}
+
+# Подключаем обработчики
+fig.canvas.mpl_connect('key_press_event', on_key_press)
+fig.canvas.mpl_connect('motion_notify_event', on_motion)
+fig.canvas.mpl_connect('scroll_event', on_scroll)
 
 # Анимация
 def init():
