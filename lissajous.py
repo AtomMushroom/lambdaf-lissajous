@@ -23,6 +23,7 @@ mode_lissajous = True  # True = Лиссажу, False = x(t)/y(t)
 
 # Создание фигуры
 fig = plt.figure(figsize=(12, 9))
+fig.canvas.manager.set_window_title('Lambda F генератор сигнала для фигур Лиссажу')
 
 # Основной график Лиссажу
 ax_lissajous = plt.axes([0.1, 0.45, 0.8, 0.45])
@@ -78,6 +79,25 @@ def update_params(val):
 for slider in sliders.values():
     slider.on_changed(update_params)
 
+# Кнопка переключения звуковых каналов
+swap_ax = plt.axes([0.8, 0.01, 0.15, 0.04])
+swap_button = Button(swap_ax, 'Сменить аудио каналы', color='lightcyan')
+
+audio_channels_swapped = False
+
+def swap_audio_channels(event):
+    global audio_channels_swapped
+    
+    # Меняем состояние флага
+    audio_channels_swapped = not audio_channels_swapped
+    
+    # Обновляем текст кнопки
+    if audio_channels_swapped:
+        swap_button.label.set_text('Каналы: R-L')
+    else:
+        swap_button.label.set_text('Каналы: L-R')
+    
+    plt.draw()
 # Кнопка звука
 audio_ax = plt.axes([0.05, 0.01, 0.1, 0.04])
 audio_button = Button(audio_ax, 'Звук ВКЛ', color='lightgoldenrodyellow')
@@ -103,10 +123,16 @@ def audio_callback(outdata, frames, time_info, status):
 
     left = params['A'] * np.sin(2 * np.pi * params['a'] * t + params['delta'])
     right = params['B'] * np.sin(2 * np.pi * params['b'] * t)
-    stereo_sound = np.column_stack((left, right)).astype(np.float32)
+    
+    # Меняем каналы местами если флаг установлен
+    if audio_channels_swapped:
+        stereo_sound = np.column_stack((right, left)).astype(np.float32)
+    else:
+        stereo_sound = np.column_stack((left, right)).astype(np.float32)
     
     outdata[:] = stereo_sound
 
+swap_button.on_clicked(swap_audio_channels)
 def start_audio_stream():
     global stream, t_audio_global
     t_audio_global = 0.0
